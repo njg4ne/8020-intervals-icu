@@ -1,62 +1,92 @@
 import fs from "fs";
+import path from "path";
 
-const { API_KEY, ATHLETE_ID } = process.env;
-const API_SERVER = "https://intervals.icu";
-// The API uses basic authentication 228 for personal use. The username is “API_KEY” and the password your API key. Example using curl:
-// $ curl -u API_KEY:1l0nlqjq3j1obdhg08rz5rfhx https://intervals.icu/api/v1/athlete/2049151/activities.csv
-const USER_NAME = "API_KEY";
+// const { API_KEY, ATHLETE_ID } = process.env;
+// const API_SERVER = "https://intervals.icu";
+// // The API uses basic authentication 228 for personal use. The username is “API_KEY” and the password your API key. Example using curl:
+// // $ curl -u API_KEY:1l0nlqjq3j1obdhg08rz5rfhx https://intervals.icu/api/v1/athlete/2049151/activities.csv
+// const USER_NAME = "API_KEY";
 
-const res = await fetch(`${API_SERVER}/api/v1/athlete/${ATHLETE_ID}/folders`, {
-  headers: {
-    Authorization: `Basic ${btoa(`${USER_NAME}:${API_KEY}`)}`,
-  },
-});
+// const res = await fetch(`${API_SERVER}/api/v1/athlete/${ATHLETE_ID}/folders`, {
+//   headers: {
+//     Authorization: `Basic ${btoa(`${USER_NAME}:${API_KEY}`)}`,
+//   },
+// });
 
-const json = await res.json();
-// console.log(json);
+// const json = await res.json();
+// // console.log(json);
 
-// save as workouts.json
-import { writeFileSync } from "fs";
-import parseFIT from "./parse-fit";
-writeFileSync("folders.json", JSON.stringify(json, null, 2));
-// get the name and id of the folder with name API Test
-const { id: targetFolderId, name: targetFolderName } = json.find(
-  (f) => f.name === "API Test"
-);
-console.log({ targetFolderId, targetFolderName });
+// // save as workouts.json
+// import { writeFileSync } from "fs";
+// import parseFIT from "./parse-fit";
+// writeFileSync("folders.json", JSON.stringify(json, null, 2));
+// // get the name and id of the folder with name API Test
+// const { id: targetFolderId, name: targetFolderName } = json.find(
+//   (f) => f.name === "API Test"
+// );
+// console.log({ targetFolderId, targetFolderName });
 
-const testFit = "fit-files/RLI4.FIT";
+// const testFit = "fit-files/RLI4.FIT";
 // get all the file paths in fit-files
-const paths = fs.readdirSync("fit-files").map((f) => `./fit-files/${f}`);
+import { makeFolders, getFolders } from "./prepare-folders";
+import parseFIT from "./parse-fit";
+import contact from "./intervals.icu";
+await makeFolders();
+const folders = await getFolders();
+const folderMap = {
+  Run: "80/20 Runs",
+  Ride: "80/20 Rides",
+  Swim: "80/20 Swims",
+};
+const idMap = Object.fromEntries(
+  Object.entries(folderMap).map(([k, v]) => [
+    k,
+    folders.find((f: any) => f.name === v).id,
+  ])
+);
+console.log(idMap);
+// process.exit(0);
+
+const pathMap = {
+  Run: "Run",
+  Ride: "Bike",
+  Swim: path.join("Swim", "25y"),
+};
+
 try {
-  const paths = fs.readdirSync("fit-files").map((f) => `./fit-files/${f}`);
-  for (const path of paths) {
-    // console.log(`Parsing ${path}`);
-    const fit = parseFIT(path);
-    console.log(fit);
-    let { name, sport, text } = fit;
-    name = `8020-ICU ${name}`;
-    const postData = {
-      folder_id: targetFolderId,
-      name,
-      description: text,
-      type: sport,
-    };
-    // const res2 = await fetch(
-    //   `${API_SERVER}/api/v1/athlete/${ATHLETE_ID}/workouts`,
-    //   {
-    //     method: "POST",
-    //     headers: {
-    //       Authorization: `Basic ${btoa(`${USER_NAME}:${API_KEY}`)}`,
-    //       "Content-Type": "application/json",
-    //     },
-    //     body: JSON.stringify(postData),
-    //   }
-    // );
-    // console.log(`Sent ${name}`);
+  for (let [activityType, partialPath] of Object.entries(pathMap)) {
+    const rootPath = path.join("fit-files", partialPath);
+    const paths = fs.readdirSync(rootPath).map((f) => path.join(rootPath, f));
+    for (const path of paths) {
+      console.log(`Parsing ${path}`);
+      const fit = parseFIT(path);
+      // console.log(fit);
+      let { name, sport, text } = fit;
+      name = `8020-ICU ${name}`;
+      const postData = {
+        folder_id: idMap[sport],
+        name,
+        description: text,
+        type: sport,
+      };
+      const res = await contact({ endpoint: `/workouts`, body: postData });
+      // const res2 = await fetch(
+      //   `${API_SERVER}/api/v1/athlete/${ATHLETE_ID}/workouts`,
+      //   {
+      //     method: "POST",
+      //     headers: {
+      //       Authorization: `Basic ${btoa(`${USER_NAME}:${API_KEY}`)}`,
+      //       "Content-Type": "application/json",
+      //     },
+      //     body: JSON.stringify(postData),
+      //   }
+      // );
+      // console.log(`Sent ${name}`);
+      // break;
+    }
+    // const json2 = await res2.json();
+    // console.log(json2);
   }
-  // const json2 = await res2.json();
-  // console.log(json2);
 } catch (e) {
   console.error(e);
   process.exit(1);

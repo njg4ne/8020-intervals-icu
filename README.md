@@ -27,7 +27,7 @@ To download all the fit files into folders by sport:
 bun run download-fit-files.ts
 ```
 
-Experimental: parse and upload all workouts to intervals.icu:
+> :warning: **This command triggers hundreds of API requests**: be sure to run this only when you understand what it does.
 
 ```bash
 bun run upload.ts

@@ -43,7 +43,7 @@ const Zone8020toICU = {
 };
 const metersPerMile = 804.67 * 2;
 
-// console.log(parseFIT("fit-files/RLI11.FIT").text);
+// console.log(parseFIT("fit-files/Bike/CMI5.FIT").text);
 
 export default parseFIT;
 
@@ -65,22 +65,44 @@ function loadFIT(path: string) {
   }
   return messages;
 }
+type FitSport = "running" | "cycling" | "swimming";
+
+function stepTextIsRepeat(text: string) {
+  return text.includes("x");
+}
 
 function parseFIT(path: string) {
   const { workoutMesgs, workoutStepMesgs } = loadFIT(path);
   const { wktName: wktNameArr, sport, numValidSteps } = workoutMesgs[0];
   // console.log("workoutStepMesgs", workoutStepMesgs);
+  // return { text: "test" };
   // if sport isnt running, throw
-  if (sport !== "running") {
+
+  const sportMap: Record<FitSport, string> = {
+    running: "Run",
+    cycling: "Ride",
+    swimming: "Swim",
+  } as const;
+  if (!Object.keys(sportMap).includes(sport)) {
     throw new Error("Only running handled now. Sport given was: " + sport);
   }
   const wktName = wktNameArr[0];
-  const steps = workoutStepMesgs.reduce(stepParseReducer, [] as ICUStep[]);
+  const steps = workoutStepMesgs.reduce(
+    (steps: ICUStep[], rawStep: RawStep) => {
+      return stepParseReducer(steps, rawStep, sport as FitSport);
+    },
+    [] as ICUStep[]
+  );
 
   const pressLapIndex = steps.findIndex(
     (step: ICUStep, idx: number, arr: ICUStep[]) => {
       const nextStep = arr[idx + 1];
-      if (nextStep && stepHasText(step.text) && stepHasText(nextStep.text)) {
+      if (
+        nextStep &&
+        stepHasText(step.text) &&
+        stepHasText(nextStep.text) &&
+        !stepTextIsRepeat(step.text)
+      ) {
         const rgx = /.*Z(1|2).*/;
         const rgx2 = /.*Z(6|7).*/;
         return rgx.test(step.text) && rgx2.test(nextStep.text);
@@ -91,13 +113,10 @@ function parseFIT(path: string) {
   if (pressLapIndex > -1) {
     toPressLap(steps[pressLapIndex]);
   }
-  const sportMap = {
-    running: "Run",
-  };
 
   return {
     name: wktName,
-    sport: sportMap[sport as "running"],
+    sport: sportMap[sport as FitSport],
     text: steps.map((s: ICUStep) => s.text).join("\n"),
   };
 }
@@ -105,7 +124,7 @@ function parseFIT(path: string) {
 type RawStepCommon = {
   notes: string[];
   messageIndex: number;
-  durationType: "time" | "repeatUntilStepsCmplt" | "distance";
+  durationType: "time" | "repeatUntilStepsCmplt" | "distance" | "open";
   intensity: "warmup" | "active" | "cooldown" | "rest" | "interval" | "other";
 };
 type RawTimeStep = RawStepCommon & {
@@ -119,13 +138,19 @@ type RawStepRepeat = RawStepCommon & {
 type RawDistanceStep = RawStepCommon & {
   durationDistance: number;
 };
-type RawStep = RawTimeStep | RawStepRepeat | RawDistanceStep;
+type RawOpenStep = RawStepCommon & {};
+type RawStep = RawTimeStep | RawStepRepeat | RawDistanceStep | RawOpenStep;
 
 type ZoneKey8020 = "Z1" | "Z2" | "ZX" | "Z3" | "ZY" | "Z4" | "Z5";
 type IntervalsICUZoneKey = "Z1" | "Z2" | "Z3" | "Z4" | "Z5" | "Z6" | "Z7";
 function shortenZone(longZone: string) {
-  const rgx = /Zone (1|2|3|4|5|X|Y)/;
-  const match = rgx.exec(longZone);
+  let rgx = /Zone (1|2|3|4|5|X|Y)/;
+  let match = rgx.exec(longZone);
+  if (match) {
+    return `Z${match[1]}`;
+  }
+  rgx = /Zone(1|2|3|4|5|X|Y)/; // no space
+  match = rgx.exec(longZone);
   if (match) {
     return `Z${match[1]}`;
   } else {
@@ -199,6 +224,12 @@ function metersToMiles(meters: number) {
   miles = Math.round(miles * 8) / 8;
   return `${miles}mi`;
 }
+function metersToYards(meters: number) {
+  let yds = 1.09361 * meters;
+  // round to nearest 25
+  yds = Math.round(yds / 25) * 25;
+  return `${yds}y`;
+}
 
 // const tests = [3622, 60, 45, 90, 150, 300, 1595, 3000, 28800];
 // for (const test of tests) {
@@ -214,6 +245,9 @@ function isRepeatStep(step: RawStep): step is RawStepRepeat {
 function isDistanceStep(step: RawStep): step is RawDistanceStep {
   return step.durationType === "distance";
 }
+function isOpenStep(step: RawStep): step is RawOpenStep {
+  return step.durationType === "open";
+}
 function stepHasText(step: string | ICUStep[]): step is string {
   return typeof step === "string";
 }
@@ -226,7 +260,7 @@ function toPressLap(step: ICUStep | null | undefined) {
   return step;
 }
 
-function stepParseReducer(steps: ICUStep[], rawStep: RawStep) {
+function stepParseReducer(steps: ICUStep[], rawStep: RawStep, sport: FitSport) {
   if (isTimeStep(rawStep)) {
     const intensityTxt = `intensity=${rawStep.intensity}`;
     // console.log(intensityTxt);
@@ -252,7 +286,8 @@ function stepParseReducer(steps: ICUStep[], rawStep: RawStep) {
     });
   } else if (isRepeatStep(rawStep)) {
     // console.log("Repeat step", rawStep);
-    const idx = rawStep.durationStep;
+    const id = rawStep.durationStep;
+    const idx = steps.findIndex((s) => s.id === id);
     const repeatTimes = rawStep.repeatSteps;
     const innerText = steps
       .slice(idx)
@@ -267,7 +302,13 @@ function stepParseReducer(steps: ICUStep[], rawStep: RawStep) {
     const intensityTxt = `intensity=${rawStep.intensity}`;
     // console.log(intensityTxt);
     let distanceMeters: number = rawStep.durationDistance;
-    const distance = metersToMiles(distanceMeters);
+    let distance: any = distanceMeters;
+    if (sport === "swimming") {
+      // console.log("Swimming detected with distance", distance);
+      distance = metersToYards(distanceMeters);
+    } else {
+      distance = metersToMiles(distanceMeters);
+    }
     const zoneLong8020 = rawStep.notes[0];
     let label, zoneICU;
     if (!zoneLong8020) {
@@ -284,6 +325,11 @@ function stepParseReducer(steps: ICUStep[], rawStep: RawStep) {
     steps.push({
       id: rawStep.messageIndex,
       text,
+    });
+  } else if (isOpenStep(rawStep)) {
+    steps.push({
+      id: rawStep.messageIndex,
+      text: "-Press lap 8020/Open intensity=rest",
     });
   } else {
     throw new Error("Unhandled durationType: " + (rawStep as any).durationType);
