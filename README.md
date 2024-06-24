@@ -1,0 +1,34 @@
+# 8020 to Intervals.icu
+
+This project was created using `bun init` in bun v1.1.7. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime (but you should also be able to run it with node).
+
+Get your intervals.icu information from:
+
+```
+intervals.icu/settings >> Developer Settings >> (Athlete ID) and (API Key >> (view))
+```
+
+And place it in a `.env` file:
+
+```bash
+API_KEY=yourKeyHere
+ATHLETE_ID=yourAthleteIdHere
+```
+
+To pull the links for the workouts:
+
+```bash
+bun run scrape.ts
+```
+
+To download all the fit files into folders by sport:
+
+```bash
+bun run download-fit-files.ts
+```
+
+Experimental: parse and upload all workouts to intervals.icu:
+
+```bash
+bun run upload.ts
+```
