@@ -43,7 +43,7 @@ const Zone8020toICU = {
 };
 const metersPerMile = 804.67 * 2;
 
-// console.log(parseFIT("fit-files/Bike/CMI5.FIT").text);
+// console.log(parseFIT("fit-files/Run/RCI13.FIT"));
 
 export default parseFIT;
 
