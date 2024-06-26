@@ -33,7 +33,7 @@ To download all the fit files into folders by sport:
 bun run download-fit-files.ts
 ```
 
-> :warning: **This command triggers hundreds of API requests**: be sure to run this only when you understand what it does.
+> :warning: **This command triggers several API requests that modify your intervals.icu workout library by creating workout folders and uploading 479 workouts to your libary**: keep in mind that if you already have these workout folders populated, duplicates will be uploaded.
 
 ```bash
 bun run upload.ts
