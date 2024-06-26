@@ -1,0 +1,16 @@
+{
+  "name": "scrape",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@garmin/fitsdk": "^21.141.0",
+    "axios": "^1.7.2",
+    "puppeteer": "^22.10.0"
+  }
+}
